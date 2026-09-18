@@ -1,5 +1,6 @@
 from dotenv import load_dotenv
-from smolagents import CodeAgent, LiteLLMModel, List, tool
+from typing import List
+from smolagents import CodeAgent, LiteLLMModel, tool
 import subprocess
 import os
 
