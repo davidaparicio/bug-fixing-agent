@@ -49,9 +49,15 @@ This POC was created as part of the [Dust](https://dust.tt/) AI Agents Hackathon
 python agent.py "fix the button click handler in main.js"
 ```
 
-### As an API server:
+### As an API server (development):
 ```
 python api.py
+```
+
+### As an API server (production):
+```
+pip install gunicorn
+gunicorn api:app --bind 0.0.0.0:5000 --timeout 300 --workers 2
 ```
 
 Health check:
@@ -69,9 +75,10 @@ curl -X POST http://localhost:5000/api/run \
 
 ## Technical Details
 
-- Built with smolagents from HuggingFace
+- Built with smolagents `ToolCallingAgent` from HuggingFace (tool-calls only, no arbitrary code execution)
 - Uses LiteLLM for model access
 - Git operations handled through subprocess, relying on a user being authenticated on the system
+- `python api.py` runs Flask's single-threaded dev server; use gunicorn (or another WSGI server) for production
 
 ## Next steps
 

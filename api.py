@@ -51,7 +51,10 @@ def run_engine():
         logger.exception("Agent execution failed")
         return jsonify({"error": "Agent execution failed"}), 500
 
-    return jsonify(result)
+    try:
+        return jsonify(result)
+    except TypeError:
+        return jsonify({"result": str(result)})
 
 
 if __name__ == '__main__':

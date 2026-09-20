@@ -1,12 +1,15 @@
 from dotenv import load_dotenv
 from typing import List
-from smolagents import CodeAgent, LiteLLMModel, tool
+from smolagents import ToolCallingAgent, LiteLLMModel, tool
 import subprocess
 import os
 import tempfile
 import shutil
+import logging
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 CODEBASE_PATH = os.getenv("CODEBASE_PATH")
 MODEL_ID = os.getenv("MODEL_ID")
@@ -22,6 +25,7 @@ if not API_KEY:
 CODEBASE_PATH = os.path.realpath(CODEBASE_PATH)
 
 SUBPROCESS_TIMEOUT = 120
+MAX_FILES_LISTED = 5000
 
 model = LiteLLMModel(
     model_id=MODEL_ID,
@@ -37,20 +41,29 @@ def _validate_path(file_path: str) -> str:
     return resolved
 
 
+def _run_git(*args: str) -> str:
+    try:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=CODEBASE_PATH,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=SUBPROCESS_TIMEOUT,
+        )
+        return result.stdout
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"git {args[0]} failed (exit {e.returncode}): {e.stderr}")
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"git {args[0]} timed out after {SUBPROCESS_TIMEOUT}s")
+
+
 @tool
 def pull_code() -> str:
     """
     Pulls the latest code from the remote repository.
     """
-    result = subprocess.run(
-        ["git", "pull"],
-        cwd=CODEBASE_PATH,
-        capture_output=True,
-        text=True,
-        check=True,
-        timeout=SUBPROCESS_TIMEOUT,
-    )
-    return result.stdout
+    return _run_git("pull")
 
 
 @tool
@@ -61,23 +74,8 @@ def commit_code(commit_message: str) -> str:
     Args:
         commit_message (str): The commit message.
     """
-    subprocess.run(
-        ["git", "add", "."],
-        cwd=CODEBASE_PATH,
-        capture_output=True,
-        text=True,
-        check=True,
-        timeout=SUBPROCESS_TIMEOUT,
-    )
-    result = subprocess.run(
-        ["git", "commit", "-m", commit_message],
-        cwd=CODEBASE_PATH,
-        capture_output=True,
-        text=True,
-        check=True,
-        timeout=SUBPROCESS_TIMEOUT,
-    )
-    return result.stdout
+    _run_git("add", ".")
+    return _run_git("commit", "-m", commit_message)
 
 
 @tool
@@ -85,15 +83,7 @@ def push_code() -> str:
     """
     Pushes the latest code to the remote repository.
     """
-    result = subprocess.run(
-        ["git", "push"],
-        cwd=CODEBASE_PATH,
-        capture_output=True,
-        text=True,
-        check=True,
-        timeout=SUBPROCESS_TIMEOUT,
-    )
-    return result.stdout
+    return _run_git("push")
 
 
 @tool
@@ -111,6 +101,10 @@ def get_file_contents(file_path: str) -> str:
     try:
         with open(validated_path, 'r') as file:
             return file.read()
+    except FileNotFoundError:
+        return f"Error: file '{file_path}' does not exist."
+    except PermissionError:
+        return f"Error: permission denied reading '{file_path}'."
     except UnicodeDecodeError:
         return f"Error: '{file_path}' is a binary file and cannot be read as text."
 
@@ -143,7 +137,7 @@ def write_file(file_path: str, content: str) -> str:
 @tool
 def list_all_files() -> List[str]:
     """
-    Lists all files.
+    Lists all files in the codebase (up to a limit).
 
     Returns:
         List[str]: A list of file paths.
@@ -155,11 +149,14 @@ def list_all_files() -> List[str]:
 
         for name in files:
             file_list.append(os.path.join(path, name))
+            if len(file_list) >= MAX_FILES_LISTED:
+                logger.warning("list_all_files hit %d file limit", MAX_FILES_LISTED)
+                return file_list
 
     return file_list
 
 
-agent = CodeAgent(tools=[
+agent = ToolCallingAgent(tools=[
     pull_code,
     list_all_files,
     write_file,
@@ -176,7 +173,6 @@ Always pull latest code first.
 Always commit and push the code at the end as a last action.
 
 Your main task is to make changes to the codebase.
-`replace` python method must always have the third parameter set to 1.
 You can change multiple parts of the codebase.
 
 After you've made the changes, check the files to make sure they are correct.
@@ -201,4 +197,8 @@ User query that is describing the required changes:
 
 if __name__ == "__main__":
     import sys
-    agent.run(" ".join(sys.argv[1:]))
+    query = " ".join(sys.argv[1:])
+    if not query:
+        print("Usage: python agent.py <query>")
+        sys.exit(1)
+    run_agent(query, "")
