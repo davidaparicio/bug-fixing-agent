@@ -51,7 +51,8 @@ def commit_code(commit_message: str) -> str:
         commit_message (str): The commit message.
     """
 
-    result = subprocess.check_output(f"cd {os.getenv('CODEBASE_PATH', '')} && git add . && git commit -am '{commit_message.replace("'", "\\'")}'", shell=True)
+    safe_msg = commit_message.replace("'", "\\'")
+    result = subprocess.check_output(f"cd {os.getenv('CODEBASE_PATH', '')} && git add . && git commit -am '{safe_msg}'", shell=True)
 
     return result.decode('utf-8')
 
