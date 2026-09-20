@@ -1,13 +1,20 @@
 """
 Root conftest: patches LiteLLMModel so that importing agent.py never hits a
-real LLM provider.  The patch is session-scoped — it is installed once before
-any test and stays active for the entire pytest run.
+real LLM provider.  The patch is function-scoped and skipped for tests
+marked ``e2e``, so end-to-end tests can use the real smolagents stack.
 """
 
 import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+# ---------------------------------------------------------------------------
+# Save real classes before anything patches them
+# ---------------------------------------------------------------------------
+
+from smolagents import LiteLLMModel as _RealLiteLLMModel
+from smolagents import CodeAgent as _RealCodeAgent
 
 
 # ---------------------------------------------------------------------------
@@ -55,20 +62,26 @@ class FakeCodeAgent:
 
 
 # ---------------------------------------------------------------------------
-# Session-scoped patches — applied before any module import of agent/api
+# Function-scoped patches — skipped for tests marked "e2e"
 # ---------------------------------------------------------------------------
 
-@pytest.fixture(autouse=True, scope="session")
-def _mock_litellm_globally():
-    """Patch smolagents classes so ``import agent`` never touches LiteLLM."""
+@pytest.fixture(autouse=True)
+def _mock_litellm(request):
+    """Patch smolagents classes so ``import agent`` never touches LiteLLM.
+
+    Skipped for tests marked ``e2e`` — those use the real classes.
+    """
+    if "e2e" in {m.name for m in request.node.iter_markers()}:
+        yield
+        return
+
     with patch("smolagents.LiteLLMModel", FakeLiteLLMModel), \
          patch("smolagents.CodeAgent", FakeCodeAgent):
-        # Clear cached modules so each import picks up the patch
         for mod_name in list(sys.modules):
             if mod_name in ("agent", "api"):
                 del sys.modules[mod_name]
         yield
-    # Cleanup: drop cached modules so other test sessions start fresh
+
     for mod_name in list(sys.modules):
         if mod_name in ("agent", "api"):
             del sys.modules[mod_name]
@@ -80,3 +93,19 @@ def _set_env(monkeypatch):
     monkeypatch.setenv("MODEL_ID", "fake-provider/fake-model")
     monkeypatch.setenv("API_KEY", "sk-fake-test-key")
     monkeypatch.setenv("CODEBASE_PATH", "/tmp/test-codebase")
+
+
+# ---------------------------------------------------------------------------
+# Fixtures that expose the real (unpatched) classes for E2E tests
+# ---------------------------------------------------------------------------
+
+@pytest.fixture()
+def real_litellm_model_class():
+    """Return the real LiteLLMModel class, bypassing any mock."""
+    return _RealLiteLLMModel
+
+
+@pytest.fixture()
+def real_code_agent_class():
+    """Return the real CodeAgent class, bypassing any mock."""
+    return _RealCodeAgent
