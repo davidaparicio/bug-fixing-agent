@@ -1,11 +1,19 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from agent import run_agent
+import hmac
 import logging
 import os
 
 app = Flask(__name__)
-CORS(app)
+app.config['MAX_CONTENT_LENGTH'] = 1 * 1024 * 1024  # 1 MB
+
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "").split(",")
+ALLOWED_ORIGINS = [o.strip() for o in ALLOWED_ORIGINS if o.strip()]
+if ALLOWED_ORIGINS:
+    CORS(app, origins=ALLOWED_ORIGINS)
+else:
+    CORS(app)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -13,11 +21,17 @@ logger = logging.getLogger(__name__)
 API_AUTH_KEY = os.getenv("API_AUTH_KEY")
 
 
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({"status": "ok"})
+
+
 @app.route('/api/run', methods=['POST'])
 def run_engine():
     if API_AUTH_KEY:
-        auth = request.headers.get('Authorization')
-        if not auth or auth != f"Bearer {API_AUTH_KEY}":
+        auth = request.headers.get('Authorization', '')
+        expected = f"Bearer {API_AUTH_KEY}"
+        if not hmac.compare_digest(auth, expected):
             return jsonify({"error": "Unauthorized"}), 401
 
     data = request.get_json()

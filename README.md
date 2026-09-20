@@ -10,6 +10,9 @@ This POC was created as part of the [Dust](https://dust.tt/) AI Agents Hackathon
 - Git integration for pulling, committing, and pushing changes
 - File management capabilities (read/write)
 - REST API for integration with other applications
+- Bearer token authentication (optional)
+- CORS support with configurable origins
+- Health check endpoint
 
 ## Setup
 
@@ -18,12 +21,26 @@ This POC was created as part of the [Dust](https://dust.tt/) AI Agents Hackathon
    ```
    pip install -r requirements.txt
    ```
-3. Create a `.env` file with the following variables:
+3. Create a `.env` file based on `.env.example`:
    ```
-   MODEL_ID=your_model_name
+   MODEL_ID=anthropic/claude-3-5-sonnet-latest
    API_KEY=your_api_key
    CODEBASE_PATH=/path/to/codebase
+   API_AUTH_KEY=your_secret_key
+   FLASK_DEBUG=false
+   ALLOWED_ORIGINS=https://your-frontend.example.com
    ```
+
+### Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `MODEL_ID` | Yes | LiteLLM model identifier (e.g. `anthropic/claude-3-5-sonnet-latest`) |
+| `API_KEY` | Yes | API key for the LLM provider |
+| `CODEBASE_PATH` | Yes | Absolute path to the codebase the agent operates on |
+| `API_AUTH_KEY` | No | Bearer token for API authentication. If unset, the API is unauthenticated |
+| `FLASK_DEBUG` | No | Set to `true` to enable Flask debug mode (default: `false`) |
+| `ALLOWED_ORIGINS` | No | Comma-separated list of allowed CORS origins. If unset, all origins are allowed |
 
 ## Usage
 
@@ -37,12 +54,17 @@ python agent.py "fix the button click handler in main.js"
 python api.py
 ```
 
+Health check:
+```
+curl http://localhost:5000/health
+```
+
 Then send POST requests to `/api/run` with JSON body:
-```json
-{
-  "query": "fix the button click handler in main.js",
-  "context": "additional context about the application"
-}
+```bash
+curl -X POST http://localhost:5000/api/run \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your_secret_key" \
+  -d '{"query": "fix the button click handler in main.js", "context": "additional context"}'
 ```
 
 ## Technical Details
