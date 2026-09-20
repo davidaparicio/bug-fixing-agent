@@ -1,0 +1,13 @@
+[tool.pytest.ini_options]
+# By default, only run unit tests (skip e2e / integration).
+# Run integration tests explicitly:
+#   pytest -m e2e          → mock-server E2E tests
+#   pytest -m ollama       → real Ollama tests
+#   pytest -m lmstudio     → real LM Studio tests
+#   pytest -m "e2e or ollama or lmstudio"  → all integration tests
+addopts = "-m 'not (e2e or ollama or lmstudio)'"
+markers = [
+    "e2e: end-to-end tests using a mock OpenAI-compatible server",
+    "ollama: requires a running Ollama server (localhost:11434)",
+    "lmstudio: requires a running LM Studio server (localhost:1234)",
+]
