@@ -1,0 +1,4 @@
+smolagents
+litellm
+flask
+python-dotenv
